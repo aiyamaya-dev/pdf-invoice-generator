@@ -1,54 +1,266 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Invoice Generator</title>
+<title>NovaTech Invoice Manager</title>
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;justify-content:center;padding:40px}
-.card{background:#1e293b;padding:30px;border-radius:12px;width:500px}
-h1{color:#38bdf8;margin-bottom:20px;font-size:1.4rem}
-label{display:block;margin-top:12px;font-size:0.85rem;color:#94a3b8}
-input,select{width:100%;padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;margin-top:4px}
-.row{display:flex;gap:10px}
-.row>div{flex:1}
-button{width:100%;margin-top:20px;padding:12px;background:#1e40af;color:white;border:none;border-radius:8px;font-size:1rem;cursor:pointer}
-button:hover{background:#2563eb}
-.items{margin-top:16px;border:1px solid #334155;border-radius:8px;padding:12px}
-.item{display:flex;gap:8px;margin-bottom:8px}
-.item input{font-size:0.85rem}
-.add{background:#334155;padding:6px 12px;border:none;color:#94a3b8;border-radius:4px;cursor:pointer;width:auto;margin-top:8px}
+body{background:#0f172a;font-family:Inter,-apple-system,sans-serif}
+.status-paid{color:#22c55e;background:#22c55e20}.status-sent{color:#3b82f6;background:#3b82f620}
+.status-overdue{color:#ef4444;background:#ef444420}.status-draft{color:#94a3b8;background:#94a3b820}
+.inv-row:hover{background:#1e293b}
+.inv-row.active{background:#1e293b;border-left:3px solid #3b82f6}
+iframe{border:none;border-radius:8px}
+input,select,textarea{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 10px}
+input:focus,select:focus{outline:none;border-color:#3b82f6}
 </style>
 </head>
-<body>
-<div class="card">
-  <h1>📄 Invoice Generator</h1>
-  <div class="row"><div><label>Your Company<input id="company" value="AIyamaya Dev"></label></div><div><label>Currency<select id="currency"><option>USD</option><option>CAD</option><option>EUR</option><option>GBP</option></select></label></div></div>
-  <label>Client Name<input id="client" placeholder="Client Corp"></label>
-  <div class="items">
-    <div style="font-size:0.85rem;color:#94a3b8;margin-bottom:8px">Line Items</div>
-    <div id="itemsContainer">
-      <div class="item"><input placeholder="Description" class="desc" style="flex:3"><input placeholder="Qty" class="qty" type="number" value="1" style="flex:1"><input placeholder="Rate" class="rate" type="number" style="flex:1"></div>
-    </div>
-    <button class="add" onclick="addItem()">+ Add Item</button>
+<body class="text-slate-200 h-screen flex flex-col overflow-hidden">
+
+<!-- Stats Bar -->
+<div class="flex gap-4 p-4 border-b border-slate-700">
+  <div class="flex-1 bg-slate-800 rounded-lg p-4">
+    <div class="text-xs text-slate-400 uppercase tracking-wider">Total Revenue</div>
+    <div class="text-2xl font-bold text-green-400 mt-1" id="statRevenue">$0</div>
   </div>
-  <div class="row"><div><label>Tax %<input id="tax" type="number" value="13"></label></div><div><label>Discount $<input id="discount" type="number" value="0"></label></div></div>
-  <button onclick="generate()">Generate PDF</button>
+  <div class="flex-1 bg-slate-800 rounded-lg p-4">
+    <div class="text-xs text-slate-400 uppercase tracking-wider">Pending</div>
+    <div class="text-2xl font-bold text-blue-400 mt-1" id="statPending">$0</div>
+  </div>
+  <div class="flex-1 bg-slate-800 rounded-lg p-4">
+    <div class="text-xs text-slate-400 uppercase tracking-wider">Overdue</div>
+    <div class="text-2xl font-bold text-red-400 mt-1" id="statOverdue">$0</div>
+  </div>
+  <div class="flex items-center">
+    <button onclick="newInvoice()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ New Invoice</button>
+  </div>
 </div>
+
+<div class="flex flex-1 overflow-hidden">
+  <!-- Left: Invoice List -->
+  <div class="w-80 border-r border-slate-700 overflow-y-auto flex-shrink-0">
+    <div id="invoiceList" class="divide-y divide-slate-800"></div>
+  </div>
+
+  <!-- Right: Form + Preview -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <div id="formPanel" class="p-4 overflow-y-auto flex-1">
+      <div class="max-w-2xl mx-auto space-y-4">
+        <input type="hidden" id="editId">
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label class="text-xs text-slate-400">Client</label>
+            <select id="clientSelect" onchange="fillClient()" class="w-full mt-1">
+              <option value="">Select client...</option>
+            </select>
+          </div>
+          <div class="w-32">
+            <label class="text-xs text-slate-400">Currency</label>
+            <select id="currency" class="w-full mt-1"><option>CAD</option><option>USD</option><option>EUR</option><option>GBP</option></select>
+          </div>
+          <div class="w-32">
+            <label class="text-xs text-slate-400">Status</label>
+            <select id="status" class="w-full mt-1"><option>draft</option><option>sent</option><option>paid</option><option>overdue</option></select>
+          </div>
+        </div>
+        <div class="flex gap-3">
+          <div class="flex-1"><label class="text-xs text-slate-400">Client Name</label><input id="clientName" class="w-full mt-1" placeholder="Client name"></div>
+          <div class="w-40"><label class="text-xs text-slate-400">Due Date</label><input id="dueDate" type="date" class="w-full mt-1"></div>
+        </div>
+        <div class="flex gap-3">
+          <div class="flex-1"><label class="text-xs text-slate-400">Tax Rate %</label><input id="taxRate" type="number" value="13" class="w-full mt-1" oninput="calcTotals()"></div>
+          <div class="flex-1"><label class="text-xs text-slate-400">Discount $</label><input id="discount" type="number" value="0" class="w-full mt-1" oninput="calcTotals()"></div>
+        </div>
+
+        <!-- Items -->
+        <div class="bg-slate-800 rounded-lg p-3">
+          <div class="flex text-xs text-slate-400 mb-2 px-1">
+            <span class="flex-[3]">Description</span><span class="w-20 text-center">Qty</span><span class="w-24 text-center">Rate</span><span class="w-24 text-right">Amount</span><span class="w-8"></span>
+          </div>
+          <div id="itemsContainer" class="space-y-2"></div>
+          <button onclick="addItem()" class="mt-2 text-sm text-blue-400 hover:text-blue-300">+ Add Item</button>
+        </div>
+
+        <!-- Totals -->
+        <div class="text-right space-y-1 text-sm">
+          <div>Subtotal: <span id="subtotalDisplay" class="font-mono">$0.00</span></div>
+          <div>Tax: <span id="taxDisplay" class="font-mono">$0.00</span></div>
+          <div>Discount: <span id="discountDisplay" class="font-mono text-red-400">-$0.00</span></div>
+          <div class="text-lg font-bold text-blue-400">Total: <span id="totalDisplay" class="font-mono">$0.00</span></div>
+        </div>
+
+        <div class="flex gap-3">
+          <button onclick="saveInvoice()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium">Save Invoice</button>
+          <button onclick="previewPDF()" id="previewBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg" style="display:none">Preview PDF</button>
+          <button onclick="deleteInvoice()" id="deleteBtn" class="bg-red-600/20 hover:bg-red-600/40 text-red-400 px-4 py-2 rounded-lg" style="display:none">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDF Preview -->
+    <div id="pdfPreview" class="border-t border-slate-700 h-[40%]" style="display:none">
+      <iframe id="pdfFrame" class="w-full h-full bg-white"></iframe>
+    </div>
+  </div>
+</div>
+
 <script>
-function addItem(){
-  const div=document.createElement('div');div.className='item';
-  div.innerHTML='<input placeholder="Description" class="desc" style="flex:3"><input placeholder="Qty" class="qty" type="number" value="1" style="flex:1"><input placeholder="Rate" class="rate" type="number" style="flex:1">';
+let clients = [];
+const fmt = n => `CA$${Number(n||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+
+async function loadStats() {
+  const s = await (await fetch('/api/stats')).json();
+  document.getElementById('statRevenue').textContent = fmt(s.total_revenue);
+  document.getElementById('statPending').textContent = fmt(s.pending);
+  document.getElementById('statOverdue').textContent = fmt(s.overdue);
+}
+
+async function loadInvoices() {
+  const invs = await (await fetch('/api/invoices')).json();
+  const list = document.getElementById('invoiceList');
+  list.innerHTML = invs.map(inv => `
+    <div class="inv-row p-3 cursor-pointer ${inv.id == document.getElementById('editId').value ? 'active' : ''}" onclick="editInvoice(${inv.id})">
+      <div class="flex justify-between items-center">
+        <span class="font-mono text-sm">${inv.invoice_number}</span>
+        <span class="status-${inv.status} text-xs px-2 py-0.5 rounded-full font-medium">${inv.status}</span>
+      </div>
+      <div class="text-sm text-slate-400 mt-1">${inv.client_name}</div>
+      <div class="text-sm font-medium mt-0.5">${fmt(inv.total)}</div>
+    </div>
+  `).join('');
+}
+
+async function loadClients() {
+  clients = await (await fetch('/api/clients')).json();
+  const sel = document.getElementById('clientSelect');
+  sel.innerHTML = '<option value="">Select client...</option>' + clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+function fillClient() {
+  const c = clients.find(c => c.id == document.getElementById('clientSelect').value);
+  if (c) document.getElementById('clientName').value = c.name;
+}
+
+function addItem(desc='', qty=1, rate=0) {
+  const div = document.createElement('div');
+  div.className = 'flex gap-2 items-center';
+  div.innerHTML = `<input class="flex-[3] item-desc" placeholder="Description" value="${desc}">
+    <input class="w-20 text-center item-qty" type="number" value="${qty}" min="1" oninput="calcTotals()">
+    <input class="w-24 text-right item-rate" type="number" value="${rate}" step="0.01" oninput="calcTotals()">
+    <span class="w-24 text-right text-sm font-mono item-amount">$0.00</span>
+    <button onclick="this.parentElement.remove();calcTotals()" class="w-8 text-red-400 hover:text-red-300">✕</button>`;
   document.getElementById('itemsContainer').appendChild(div);
+  calcTotals();
 }
-async function generate(){
-  const items=[...document.querySelectorAll('.item')].map(el=>({desc:el.querySelector('.desc').value,qty:+el.querySelector('.qty').value,rate:+el.querySelector('.rate').value}));
-  const body={company:document.getElementById('company').value,client:document.getElementById('client').value,currency:document.getElementById('currency').value,items,tax:+document.getElementById('tax').value,discount:+document.getElementById('discount').value};
-  const res=await fetch('/api/invoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const blob=await res.blob();
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='invoice.pdf';a.click();
+
+function calcTotals() {
+  let subtotal = 0;
+  document.querySelectorAll('#itemsContainer > div').forEach(row => {
+    const qty = +row.querySelector('.item-qty').value || 0;
+    const rate = +row.querySelector('.item-rate').value || 0;
+    const amt = qty * rate;
+    subtotal += amt;
+    row.querySelector('.item-amount').textContent = `$${amt.toFixed(2)}`;
+  });
+  const taxRate = +document.getElementById('taxRate').value || 0;
+  const discount = +document.getElementById('discount').value || 0;
+  const tax = Math.round((subtotal - discount) * taxRate) / 100;
+  const total = subtotal - discount + tax;
+  document.getElementById('subtotalDisplay').textContent = `$${subtotal.toFixed(2)}`;
+  document.getElementById('taxDisplay').textContent = `$${tax.toFixed(2)}`;
+  document.getElementById('discountDisplay').textContent = `-$${discount.toFixed(2)}`;
+  document.getElementById('totalDisplay').textContent = `$${total.toFixed(2)}`;
 }
+
+function getFormData() {
+  const items = [...document.querySelectorAll('#itemsContainer > div')].map(row => ({
+    desc: row.querySelector('.item-desc').value,
+    qty: +row.querySelector('.item-qty').value || 1,
+    rate: +row.querySelector('.item-rate').value || 0,
+  }));
+  return {
+    client_id: +document.getElementById('clientSelect').value || null,
+    client_name: document.getElementById('clientName').value,
+    currency: document.getElementById('currency').value,
+    status: document.getElementById('status').value,
+    due_date: document.getElementById('dueDate').value || null,
+    tax_rate: +document.getElementById('taxRate').value,
+    discount: +document.getElementById('discount').value,
+    items,
+  };
+}
+
+async function saveInvoice() {
+  const id = document.getElementById('editId').value;
+  const data = getFormData();
+  if (!data.items.length) return alert('Add at least one item');
+  if (!data.client_name) return alert('Client name required');
+  
+  const url = id ? `/api/invoices/${id}` : '/api/invoices';
+  const method = id ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+  if (res.ok) {
+    const result = await res.json();
+    if (!id && result.id) document.getElementById('editId').value = result.id;
+    loadInvoices(); loadStats();
+    document.getElementById('previewBtn').style.display = '';
+    document.getElementById('deleteBtn').style.display = '';
+  }
+}
+
+async function editInvoice(id) {
+  const inv = await (await fetch(`/api/invoices/${id}`)).json();
+  document.getElementById('editId').value = inv.id;
+  document.getElementById('clientSelect').value = inv.client_id || '';
+  document.getElementById('clientName').value = inv.client_name;
+  document.getElementById('currency').value = inv.currency;
+  document.getElementById('status').value = inv.status;
+  document.getElementById('dueDate').value = inv.due_date || '';
+  document.getElementById('taxRate').value = inv.tax_rate;
+  document.getElementById('discount').value = inv.discount;
+  
+  document.getElementById('itemsContainer').innerHTML = '';
+  inv.items.forEach(i => addItem(i.desc, i.qty, i.rate));
+  
+  document.getElementById('previewBtn').style.display = '';
+  document.getElementById('deleteBtn').style.display = '';
+  loadInvoices();
+}
+
+function previewPDF() {
+  const id = document.getElementById('editId').value;
+  if (!id) return;
+  document.getElementById('pdfPreview').style.display = '';
+  document.getElementById('pdfFrame').src = `/api/invoices/${id}/pdf`;
+}
+
+async function deleteInvoice() {
+  const id = document.getElementById('editId').value;
+  if (!id || !confirm('Delete this invoice?')) return;
+  await fetch(`/api/invoices/${id}`, { method: 'DELETE' });
+  newInvoice();
+  loadInvoices(); loadStats();
+}
+
+function newInvoice() {
+  document.getElementById('editId').value = '';
+  document.getElementById('clientSelect').value = '';
+  document.getElementById('clientName').value = '';
+  document.getElementById('status').value = 'draft';
+  document.getElementById('dueDate').value = '';
+  document.getElementById('taxRate').value = '13';
+  document.getElementById('discount').value = '0';
+  document.getElementById('itemsContainer').innerHTML = '';
+  document.getElementById('previewBtn').style.display = 'none';
+  document.getElementById('deleteBtn').style.display = 'none';
+  document.getElementById('pdfPreview').style.display = 'none';
+  addItem();
+  loadInvoices();
+}
+
+// Init
+loadStats(); loadInvoices(); loadClients();
+addItem();
 </script>
 </body>
 </html>
