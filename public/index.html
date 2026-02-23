@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Invoice Generator</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;justify-content:center;padding:40px}
+.card{background:#1e293b;padding:30px;border-radius:12px;width:500px}
+h1{color:#38bdf8;margin-bottom:20px;font-size:1.4rem}
+label{display:block;margin-top:12px;font-size:0.85rem;color:#94a3b8}
+input,select{width:100%;padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;margin-top:4px}
+.row{display:flex;gap:10px}
+.row>div{flex:1}
+button{width:100%;margin-top:20px;padding:12px;background:#1e40af;color:white;border:none;border-radius:8px;font-size:1rem;cursor:pointer}
+button:hover{background:#2563eb}
+.items{margin-top:16px;border:1px solid #334155;border-radius:8px;padding:12px}
+.item{display:flex;gap:8px;margin-bottom:8px}
+.item input{font-size:0.85rem}
+.add{background:#334155;padding:6px 12px;border:none;color:#94a3b8;border-radius:4px;cursor:pointer;width:auto;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📄 Invoice Generator</h1>
+  <div class="row"><div><label>Your Company<input id="company" value="AIyamaya Dev"></label></div><div><label>Currency<select id="currency"><option>USD</option><option>CAD</option><option>EUR</option><option>GBP</option></select></label></div></div>
+  <label>Client Name<input id="client" placeholder="Client Corp"></label>
+  <div class="items">
+    <div style="font-size:0.85rem;color:#94a3b8;margin-bottom:8px">Line Items</div>
+    <div id="itemsContainer">
+      <div class="item"><input placeholder="Description" class="desc" style="flex:3"><input placeholder="Qty" class="qty" type="number" value="1" style="flex:1"><input placeholder="Rate" class="rate" type="number" style="flex:1"></div>
+    </div>
+    <button class="add" onclick="addItem()">+ Add Item</button>
+  </div>
+  <div class="row"><div><label>Tax %<input id="tax" type="number" value="13"></label></div><div><label>Discount $<input id="discount" type="number" value="0"></label></div></div>
+  <button onclick="generate()">Generate PDF</button>
+</div>
+<script>
+function addItem(){
+  const div=document.createElement('div');div.className='item';
+  div.innerHTML='<input placeholder="Description" class="desc" style="flex:3"><input placeholder="Qty" class="qty" type="number" value="1" style="flex:1"><input placeholder="Rate" class="rate" type="number" style="flex:1">';
+  document.getElementById('itemsContainer').appendChild(div);
+}
+async function generate(){
+  const items=[...document.querySelectorAll('.item')].map(el=>({desc:el.querySelector('.desc').value,qty:+el.querySelector('.qty').value,rate:+el.querySelector('.rate').value}));
+  const body={company:document.getElementById('company').value,client:document.getElementById('client').value,currency:document.getElementById('currency').value,items,tax:+document.getElementById('tax').value,discount:+document.getElementById('discount').value};
+  const res=await fetch('/api/invoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const blob=await res.blob();
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='invoice.pdf';a.click();
+}
+</script>
+</body>
+</html>
